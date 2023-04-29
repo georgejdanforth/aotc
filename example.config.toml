@@ -1,0 +1,6 @@
+title = "AOtC Configuration"
+
+[spotify]
+client_id = ""
+client_secret = ""
+playlist_id = ""
