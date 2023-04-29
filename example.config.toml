@@ -4,3 +4,10 @@ title = "AOtC Configuration"
 client_id = ""
 client_secret = ""
 playlist_id = ""
+
+[database]
+host = ""
+port = 5432
+user = ""
+password = ""
+database = ""
