@@ -1,6 +1,7 @@
 title = "AOtC Configuration"
 
 [spotify]
+redirect_uri = "http://example.com"
 client_id = ""
 client_secret = ""
 playlist_id = ""

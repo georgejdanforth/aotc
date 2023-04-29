@@ -3,6 +3,7 @@ from dataclasses import dataclass
 
 @dataclass
 class SpotifyConfig:
+    redirect_uri: str
     client_id: str
     client_secret: str
     playlist_id: str
