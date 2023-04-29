@@ -1,3 +1,4 @@
+import logging
 import re
 import typing as t
 from datetime import date, datetime
@@ -7,6 +8,9 @@ from urllib.parse import ParseResult, urljoin, urlparse
 
 import requests
 from lxml import html
+
+logger = logging.getLogger(__name__)
+
 
 _feature_url_xpath = '//li[contains(@class, "featured-item")]/a/@href'
 _release_url_xpath = '//li[contains(@class, "music-grid-item")]/a/@href'
@@ -64,6 +68,7 @@ def _get_release_date(tree: html.Element) -> t.Optional[date]:
 
 
 def _scrape_release_urls(url: str) -> t.Generator[str, None, None]:
+    logger.info(f'Scraping releases for URL: {url}')
     parsed_url = urlparse(url)
     if not _is_valid_url(parsed_url):
         raise ValueError(f'Invalid URL: {url}')
@@ -79,6 +84,7 @@ def _scrape_release_urls(url: str) -> t.Generator[str, None, None]:
 
 
 def _scrape_release(url: str) -> Release:
+    logger.info(f'Scraping release for URL: {url}')
     response = requests.get(url)
     if not response.ok:
         raise RuntimeError(f'Failed to fetch release URL: {url}, status code: {response.status_code}')
@@ -92,8 +98,15 @@ def _scrape_release(url: str) -> Release:
     return Release(url, artist, title, release_date)
 
 
-def scrape(url: str) -> None:
-    release_urls = _scrape_release_urls(url)
+def scrape(url: str) -> t.Generator[Release, None, None]:
+    try:
+        release_urls = _scrape_release_urls(url)
+    except Exception:
+        logger.exception(f'Failed to scrape release URLs for URL: {url}')
+        return
+
     for release_url in release_urls:
-        release = _scrape_release(release_url)
-        print(release)
+        try:
+            yield _scrape_release(release_url)
+        except Exception:
+            logger.exception(f'Failed to scrape release: {release_url}')
