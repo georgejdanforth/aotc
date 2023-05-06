@@ -13,7 +13,7 @@ logging.config.dictConfig(LOGGING)
 from .bandcamp import scrape as _scrape
 from .config import Config
 from .database import Database
-from .spotify import get_auth_url
+from .spotify import SpotifyClient
 
 logger = logging.getLogger(__name__)
 
@@ -52,24 +52,32 @@ def cli() -> None:
 @inject_context
 def scrape(ctx: Context, url: str) -> None:
     logging.info('Running scrape command')
+    refresh_token = ctx.db.get_refresh_token()
+    spotify = SpotifyClient(ctx.config.spotify, refresh_token)
     releases = _scrape(url)
     for release in releases:
-        print(release)
+        spotify.search(release)
 
 
 @cli.command()
 @inject_context
 def authorize(ctx: Context) -> None:
     logging.info('Running authorize command')
-    auth_url = get_auth_url(ctx.config.spotify)
+
+    client = SpotifyClient(ctx.config.spotify)
+    auth_url = client.auth_redirect_url
+
     print(f"""Visit the following URL to authorize the application:
 
     {auth_url}
 
 After being redirected, copy the authorization code from the URL and enter it below.
 """)
+
     code = input('Authorization code: ').strip()
-    ctx.db.set_auth_code(code)
+
+    refresh_token = client.authorize(code)
+    ctx.db.set_refresh_token(refresh_token)
 
 
 if __name__ == '__main__':
