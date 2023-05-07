@@ -1,3 +1,4 @@
+import logging
 import typing as t
 from base64 import b64encode
 from datetime import datetime, timedelta
@@ -9,9 +10,13 @@ import requests
 from .bandcamp import Release
 from .config import SpotifyConfig
 
+logger = logging.getLogger(__name__)
+
 
 _token_url = 'https://accounts.spotify.com/api/token'
 _search_url = 'https://api.spotify.com/v1/search'
+
+_album_tracks_url = 'https://api.spotify.com/v1/albums/{album_id}/tracks'
 
 
 def require_access_token(method: t.Callable) -> t.Callable:
@@ -104,17 +109,41 @@ class SpotifyClient:
         self._expires_at = now + timedelta(seconds=data['expires_in'])
 
     @require_access_token
-    def search(self, release: Release) -> None:
-        q = quote(f'artist:{release.artist} album:{release.title}')
-        url = f'{_search_url}?q={q}&type=album&market=US'
-        headers = {
-            'Accept': 'application/json',
-            'Authorization': f'Bearer {self._access_token}',
-            'Content-Type': 'application/json',
-        }
+    def search(self, release: Release) -> t.List[str]:
+        queries = [
+            quote(f'artist:{release.artist} album:{release.title}'),
+            quote(f'album:{release.title}'),
+        ]
+        for q in queries:
+            url = f'{_search_url}?q={q}&type=album&market=US'
+            headers = {
+                'Accept': 'application/json',
+                'Authorization': f'Bearer {self._access_token}',
+                'Content-Type': 'application/json',
+            }
 
-        response = self._session.get(url, headers=headers)
-        if not response.ok:
-            raise RuntimeError('Failed to search Spotify')
+            response = self._session.get(url, headers=headers)
+            if not response.ok:
+                raise RuntimeError('Failed to search Spotify')
 
-        print(response.json())
+            albums = response.json()['albums']['items']
+            if not albums:
+                continue
+
+            album = albums[0]
+
+            response = self._session.get(
+                _album_tracks_url.format(album_id=album['id']),
+                headers=headers
+            )
+
+            if not response.ok:
+                raise RuntimeError('Failed to get album tracks')
+
+            tracks = response.json()['items']
+
+            return [track['id'] for track in tracks]
+        else:
+            logger.warning(f'Couldn\'t find album {release.artist} - {release.title}')
+
+        return []
