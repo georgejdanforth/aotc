@@ -15,8 +15,18 @@ logger = logging.getLogger(__name__)
 
 _token_url = 'https://accounts.spotify.com/api/token'
 _search_url = 'https://api.spotify.com/v1/search'
-
 _album_tracks_url = 'https://api.spotify.com/v1/albums/{album_id}/tracks'
+_playlist_add_url = 'https://api.spotify.com/v1/playlists/{playlist_id}/tracks'
+
+
+class BadResponseException(Exception):
+    def __init__(self, message: str, response: requests.Response) -> None:
+        self.message = message
+        self.response = response
+
+    def __str__(self) -> str:
+        return f'{self.message}: {self.response.status_code} {self.response.json()}'
+
 
 
 def require_access_token(method: t.Callable) -> t.Callable:
@@ -77,8 +87,7 @@ class SpotifyClient:
 
         response = self._session.post(_token_url, headers=headers, params=params)
         if not response.ok:
-            import ipdb; ipdb.set_trace()
-            raise RuntimeError('Failed to authorize with Spotify')
+            raise BadResponseException('Failed to authorize with Spotify', response)
 
         data = response.json()
 
@@ -102,7 +111,7 @@ class SpotifyClient:
 
         response = self._session.post(_token_url, headers=headers, params=params)
         if not response.ok:
-            raise RuntimeError('Failed to get access token')
+            raise BadResponseException('Failed to get access token', response)
 
         data = response.json()
         self._access_token = data['access_token']
@@ -115,6 +124,7 @@ class SpotifyClient:
             quote(f'album:{release.title}'),
         ]
         for q in queries:
+            logger.info(f'Searching spotify for {q}')
             url = f'{_search_url}?q={q}&type=album&market=US'
             headers = {
                 'Accept': 'application/json',
@@ -124,11 +134,13 @@ class SpotifyClient:
 
             response = self._session.get(url, headers=headers)
             if not response.ok:
-                raise RuntimeError('Failed to search Spotify')
+                raise BadResponseException('Failed to search Spotify', response)
 
             albums = response.json()['albums']['items']
             if not albums:
                 continue
+
+            logger.info(f'Found release for {q}')
 
             album = albums[0]
 
@@ -138,7 +150,7 @@ class SpotifyClient:
             )
 
             if not response.ok:
-                raise RuntimeError('Failed to get album tracks')
+                raise BadResponseException('Failed to get album tracks', response)
 
             tracks = response.json()['items']
 
@@ -147,3 +159,21 @@ class SpotifyClient:
             logger.warning(f'Couldn\'t find album {release.artist} - {release.title}')
 
         return []
+
+    @require_access_token
+    def add_tracks(self, track_ids: t.List[str]) -> None:
+        logger.info('Adding tracks to playlist')
+        url = _playlist_add_url.format(playlist_id=self._config.playlist_id)
+        headers = {
+            'Accept': 'application/json',
+            'Authorization': f'Bearer {self._access_token}',
+            'Content-Type': 'application/json',
+        }
+        body = {
+            'uris': [f'spotify:track:{track_id}' for track_id in track_ids],
+            'position': 0,
+        }
+
+        response = self._session.post(url, headers=headers, json=body)
+        if not response.ok:
+            raise BadResponseException('Failed to add tracks to playlist', response)

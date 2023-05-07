@@ -56,7 +56,12 @@ def scrape(ctx: Context, url: str) -> None:
     spotify = SpotifyClient(ctx.config.spotify, refresh_token)
     releases = _scrape(url)
     for release in releases:
-        spotify.search(release)
+        tracks = spotify.search(release)
+        try:
+            # Reverse tracklist so that they appear in order when sorting by recently added
+            spotify.add_tracks(tracks[::-1])
+        except Exception:
+            logger.exception('Failed to add tracks to playlist')
 
 
 @cli.command()
